@@ -105,9 +105,6 @@ def main():
         adj = tf.io.decode_raw(parsed_features['adj'], tf.float16)
         adj = tf.cast(adj, tf.float32)
 
-        #adj_real = tf.io.decode_raw(parsed_features['adj_real'], tf.float16)
-        #adj_real = tf.cast(adj_real, tf.float32)
-
         tss_idx = tf.io.decode_raw(parsed_features['tss_idx'], tf.float16)
         tss_idx = tf.cast(tss_idx, tf.float32)
 
@@ -123,12 +120,9 @@ def main():
             return tf.data.TFRecordDataset(filename, compression_type='ZLIB')
 
     def dataset_iterator(file_name, batch_size):
-        ## dataset = tf.data.Dataset.list_files(file_name)
-        ## dataset = tf.data.Dataset.list_files(file_name)
         dataset = tf.data.TFRecordDataset(file_name, compression_type="ZLIB")
         dataset = dataset.batch(batch_size)
         dataset = dataset.map(parse_proto)
-        ## iterator = dataset.make_one_shot_iterator()
         iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
         return iterator
 
@@ -143,9 +137,7 @@ def main():
             b = 50        # number of 100bp bins inside 5Kb region
             F = 3         # number of Epigenomic tracks used in model
             X_epi = next_datum['X_epi']
-            ## print(X_epi)
             batch_size = tf.shape(X_epi)[0]
-            ## print(batch_size)
             X_epi = tf.reshape(X_epi, [batch_size, 3*T*b, F])
             adj = next_datum['adj']
             adj = tf.reshape(adj, [batch_size, 3*T, 3*T])
@@ -156,8 +148,6 @@ def main():
             idx = tf.range(T, 2*T)
 
             Y = next_datum['Y']
-            #Y = tf.reshape(Y, [batch_size, 3*T, b])
-            #Y = tf.reduce_sum(Y, axis=2)
             Y = tf.reshape(Y, [batch_size, 3*T])
 
         else:
@@ -176,14 +166,10 @@ def main():
         for num, cell_line in enumerate(cell_lines):
             for i in chr_list:
                 if options.generalizable == 0:
-                    # file_name = data_path+'/data/tfrecords/tfr_epi_'+cell_line+'_'+assay_type+'_FDR_'+fdr+'_chr'+str(i)+'.tfr'
-                    ## file_name = data_path+'/data/tfrecords/chr' +str(i)+'.tfr'
                     file_name = data_path+chr_tfr_path+'/chr' +str(i)+'.tfr'
                 else:
-                    ## file_name = data_path+'/data/tfrecords/chr' +str(i)+'.tfr'
                     file_name = data_path+chr_tfr_path+'/chr' +str(i)+'.tfr'
 
-                ## print(file_name)
                 iterator = dataset_iterator(file_name, batch_size)
                 while True:
                     data_exist, X_epi, Y, adj, idx, tss_idx = read_tf_record_1shot(iterator)
@@ -235,7 +221,6 @@ def main():
         x = layers.Reshape((N,b*F))(X_in)
         att_layers = options.att_layers
         att_heads = options.att_heads
-        ## att_dim = int(150/att_heads)
         
         if options.posenc == 0:
             print("Not using positional encoder")
@@ -254,38 +239,7 @@ def main():
         # Output of Transformer encoder still has size (1200, 150)
         # so we need to get it down to (1200, 128)
         x = layers.Conv1D(128, 3 , activation='relu', padding='same')(x)
-        ## x = layers.Dense(units=128, activation='relu')(x)
-
-        '''
-        # Add transformer here
-        # First reshape X_in from (60000, 3) to (1200, 150)
-        x = layers.Reshape((N,b*F))(X_in)
-        att_layers = options.att_layers
-        att_heads = options.att_heads
-        att_dim = int(150/att_heads)
-        for block in range(0, att_layers):
-           x = layers.MultiHeadAttention(num_heads = att_heads, key_dim = att_dim)(x, x)
-        # Output of MultiHeadAttention layer still has size (1200, 150)
-        # so we need to get it down to (1200, 128)
-        x = layers.Conv1D(128, 3 , activation='relu', padding='same')(x)
-        ''' 
-
-        '''
-	x = layers.Conv1D(128, 25, activation='relu', padding='same', kernel_regularizer=l2(l2_reg), bias_regularizer=l2(l2_reg))(X_in)
-        x = layers.BatchNormalization()(x)
-        x = layers.MaxPool1D(2)(x)
-
-        x = Dropout(dropout_rate)(x)
-        x = layers.Conv1D(128, 3, activation='relu', padding='same', kernel_regularizer=l2(l2_reg), bias_regularizer=l2(l2_reg))(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.MaxPool1D(5)(x)
-
-        x = Dropout(dropout_rate)(x)
-        x = layers.Conv1D(128, 3, activation='relu', padding='same', kernel_regularizer=l2(l2_reg), bias_regularizer=l2(l2_reg))(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.MaxPool1D(5)(x)  
-	'''
-
+	    
         att=[]
         for i in range(options.n_gat_layers):
             x, att_ = GraphAttention(F_,
@@ -359,25 +313,15 @@ def main():
         Y_all = np.array([])
         for num, cell_line in enumerate(cell_lines):
             for i in train_chr_list:
-                ## print("Reading tfr file of chr: ", i)
                 if options.generalizable == 0:
-                    # file_name_train = data_path+'/data/tfrecords/tfr_epi_'+cell_line+'_'+assay_type+'_FDR_'+fdr+'_chr'+str(i)+'.tfr'
-                    ## file_name_train = data_path+'/data/tfrecords_hightr/chr'+str(i)+'.tfr'
                     file_name_train = data_path+chr_tfr_path+'/chr'+str(i)+'.tfr'
                 else:
-                    #file_name_train = data_path+'/data/tfrecords_norm/tfr_epi_'+cell_line+'_'+assay_type+'_FDR_'+fdr+'_chr'+str(i)+'.tfr'
-                    ## file_name_train = data_path+'/data/tfrecords/tfr_epi_RPGC_'+cell_line+'_'+assay_type+'_FDR_'+fdr+'_chr'+str(i)+'.tfr'
-                    ## file_name_train = data_path+'/data/tfrecords_hightr/chr'+str(i)+'.tfr'
                     file_name_train = data_path+chr_tfr_path+'/chr'+str(i)+'.tfr'
 
-                ## print("file_name_train: ", file_name_train);
                 iterator_train = dataset_iterator(file_name_train, batch_size)
                 train_count = 0
                 while True:
                     data_exist, X_epi, Y, adj, idx, tss_idx = read_tf_record_1shot(iterator_train)
-                    ## print("X_epi: ", X_epi)
-                    ## print("X_epi shape: ", tf.shape(X_epi))
-                    ## print("Y shape: ", tf.shape(Y))
                     if data_exist:
                         if tf.reduce_sum(tf.gather(tss_idx, idx)) > 0:
                             with tf.GradientTape() as tape:
@@ -394,12 +338,6 @@ def main():
                             e2 = np.random.normal(0,1e-6,size=len(Y_idx.numpy().ravel()))
 
                             rho_gat_all = np.append(rho_gat_all, np.corrcoef(np.log2(Y_idx.numpy().ravel()+1)+e1,np.log2(Y_hat_idx.numpy().ravel()+1)+e2)[0,1])
-                            ## print("Y: ", np.log2(Y_idx.numpy().ravel()+1)+e1)
-                            ## print("Y.shape: ", (np.log2(Y_idx.numpy().ravel()+1)+e1).shape)
-                            ## print("Y_hat: ", np.log2(Y_hat_idx.numpy().ravel()+1)+e2)
-                            ## print("Y_hat.shape: ", (np.log2(Y_hat_idx.numpy().ravel()+1)+e2).shape)
-                            ## print("np.corrcoef: ", np.corrcoef(np.log2(Y_idx.numpy().ravel()+1)+e1,np.log2(Y_hat_idx.numpy().ravel()+1)+e2))
-
                             Y_hat_all = np.append(Y_hat_all, Y_hat_idx.numpy().ravel())
                             Y_all = np.append(Y_all, Y_idx.numpy().ravel())
                             train_count+=1
@@ -421,24 +359,6 @@ def main():
         print('epoch: ', epoch, ', valid loss: ', valid_loss, ', valid rho: ', valid_rho, ', time passed: ', (time.time() - t0), ' sec')
         test_loss,  test_rho = calculate_loss(model_gat, test_chr_list, cell_lines, batch_size, assay_type, fdr)
         print('epoch: ', epoch, ', test loss: ', test_loss, ', test rho: ', test_rho, ', time passed: ', (time.time() - t0), ' sec')
-
-        '''
-        if epoch%1 == 0:
-            valid_loss,  valid_rho = calculate_loss(model_gat, valid_chr_list, cell_lines, batch_size, assay_type, fdr)
-
-        if valid_loss < best_loss:
-            early_stopping_counter = 1
-            best_loss = valid_loss
-            model_gat.save(model_name_gat)
-            print('epoch: ', epoch, ', valid loss: ', valid_loss, ', valid rho: ', valid_rho, ', time passed: ', (time.time() - t0), ' sec')
-            test_loss,  test_rho = calculate_loss(model_gat, test_chr_list, cell_lines, batch_size, assay_type, fdr)
-            print('epoch: ', epoch, ', test loss: ', test_loss, ', test rho: ', test_rho, ', time passed: ', (time.time() - t0), ' sec')
-
-        else:
-            early_stopping_counter += 1
-            if early_stopping_counter == max_early_stopping:
-                break
-	'''
 
 ################################################################################
 # __main__
